@@ -3,6 +3,7 @@ import mysql.connector
 import os
 import random
 import string
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,22 +20,33 @@ def get_db():
         database=os.environ.get("MYSQLDATABASE")
     )
 
-# Inisialisasi tabel saat aplikasi pertama jalan
-def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS links (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            kode VARCHAR(10) UNIQUE NOT NULL,
-            url_asli TEXT NOT NULL,
-            kunjungan INT DEFAULT 0,
-            dibuat_pada TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
+# Inisialisasi tabel saat aplikasi pertama jalan (dengan retry)
+def init_db(max_retries=10, delay=3):
+    for attempt in range(1, max_retries + 1):
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS links (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    kode VARCHAR(10) UNIQUE NOT NULL,
+                    url_asli TEXT NOT NULL,
+                    kunjungan INT DEFAULT 0,
+                    dibuat_pada TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+            cur.close()
+            conn.close()
+            print(f"[DB] Berhasil terhubung dan tabel siap (percobaan ke-{attempt})")
+            return
+        except Exception as e:
+            print(f"[DB] Percobaan ke-{attempt} gagal: {e}")
+            if attempt < max_retries:
+                print(f"[DB] Mencoba lagi dalam {delay} detik...")
+                time.sleep(delay)
+            else:
+                print("[DB] PERINGATAN: Gagal inisialisasi database setelah semua percobaan.")
 
 # Fungsi buat kode acak 6 karakter
 def buat_kode():
